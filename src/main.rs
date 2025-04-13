@@ -19,15 +19,13 @@ fn main() {
                 let mut buffer = String::new();
                 _ = match BufReader::new(&stream).read_line(&mut buffer) {
                     Ok(_) => {
-                        if buffer.split(" ").collect::<Vec<&str>>()[1]
-                            == "/abcdefg"
-                        {
+                        if buffer.split(" ").collect::<Vec<&str>>()[1] == "/" {
+                            stream
+                                .write_all("HTTP/1.1 200 OK\r\n\r\n".as_bytes())
+                        } else {
                             stream.write_all(
                                 "HTTP/1.1 404 Not Found\r\n\r\n".as_bytes(),
                             )
-                        } else {
-                            stream
-                                .write_all("HTTP/1.1 200 OK\r\n\r\n".as_bytes())
                         }
                     }
                     Err(error) => {
