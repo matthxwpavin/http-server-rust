@@ -1,9 +1,5 @@
-#[allow(unused_imports)]
+use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
-use std::{
-    io::{BufRead, BufReader, Read, Write},
-    ops::Index,
-};
 
 fn main() {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -20,19 +16,14 @@ fn main() {
                 _ = match BufReader::new(&stream).read_line(&mut buffer) {
                     Ok(_) => {
                         if buffer.split(" ").collect::<Vec<&str>>()[1] == "/" {
-                            stream
-                                .write_all("HTTP/1.1 200 OK\r\n\r\n".as_bytes())
+                            stream.write_all(b"HTTP/1.1 200 OK\r\n\r\n")
                         } else {
-                            stream.write_all(
-                                "HTTP/1.1 404 Not Found\r\n\r\n".as_bytes(),
-                            )
+                            stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n")
                         }
                     }
                     Err(error) => {
                         println!("an error occurred: {error:?}");
-                        stream.write_all(
-                            "HTTP/1.1 500 Internal Server Error".as_bytes(),
-                        )
+                        stream.write_all(b"HTTP/1.1 500 Internal Server Error")
                     }
                 };
             }
