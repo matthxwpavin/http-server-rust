@@ -1,3 +1,4 @@
+use regex::Regex;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 
@@ -8,6 +9,8 @@ fn main() {
 
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
+    let re = Regex::new(r"/echo/(?<echo_str>.+)").unwrap();
+
     for stream in listener.incoming() {
         match stream {
             Ok(mut stream) => {
@@ -15,8 +18,28 @@ fn main() {
                 let mut buffer = String::new();
                 _ = match BufReader::new(&stream).read_line(&mut buffer) {
                     Ok(_) => {
-                        if buffer.split(" ").collect::<Vec<&str>>()[1] == "/" {
+                        let path = buffer.split(" ").collect::<Vec<&str>>()[1];
+                        if path == "/" {
                             stream.write_all(b"HTTP/1.1 200 OK\r\n\r\n")
+                        } else if re.is_match(path) {
+                            let echo = re
+                                .captures(path)
+                                .unwrap()
+                                .name("echo_str")
+                                .unwrap()
+                                .as_str();
+                            stream.write_all(
+                                format!(
+                                    "\
+                                HTTP/1.1 200 OK\r\n\
+                                Content-Type: text/plain\r\n\
+                                Content-Length: {}\r\n\
+                                \r\n{}",
+                                    echo.len(),
+                                    echo,
+                                )
+                                .as_bytes(),
+                            )
                         } else {
                             stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n")
                         }
