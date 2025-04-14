@@ -1,5 +1,5 @@
 use regex::Regex;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 
 fn main() {
@@ -15,10 +15,11 @@ fn main() {
         match stream {
             Ok(mut stream) => {
                 println!("accepted new connection");
-                let mut buffer = String::new();
-                _ = match BufReader::new(&stream).read_line(&mut buffer) {
+                let mut bufs = Vec::new();
+                _ = match BufReader::new(&stream).read_vectored(&mut bufs) {
                     Ok(_) => {
-                        let path = buffer.split(" ").collect::<Vec<&str>>()[1];
+                        let path = "";
+                        // let path = buffer.split(" ").collect::<Vec<&str>>()[1];
                         if path == "/" {
                             stream.write_all(b"HTTP/1.1 200 OK\r\n\r\n")
                         } else if re.is_match(path) {
@@ -40,6 +41,8 @@ fn main() {
                                 )
                                 .as_bytes(),
                             )
+                        } else if path == "/user-agent" {
+                            stream.write_all(b"HTTP/1.1 200 OK\r\n\r\n")
                         } else {
                             stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n")
                         }
