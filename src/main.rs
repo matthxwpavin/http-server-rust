@@ -1,8 +1,11 @@
 use core::str;
 use regex::Regex;
-use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::collections::{HashMap, HashSet};
+use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::ops::Deref;
+use std::process::exit;
+use std::{env, fs};
 
 #[derive(Debug)]
 struct HttpRequest {
@@ -41,7 +44,10 @@ impl HttpRequest {
     }
 }
 
-fn handle(stream: &mut TcpStream) -> (String, Option<String>) {
+fn handle(
+    stream: &mut TcpStream,
+    dir: Option<String>,
+) -> (String, Option<String>) {
     let mut buf = [0u8; 512];
     if let Err(err) = stream.read(&mut buf) {
         return (
@@ -106,15 +112,74 @@ fn handle(stream: &mut TcpStream) -> (String, Option<String>) {
             ),
             None,
         )
+    } else if req.path.starts_with("/files/") {
+        let filename = req.path.trim_start_matches("/files/");
+        let dir = dir.unwrap_or(String::from("/tmp/"));
+        let filename = format!("{dir}{filename}");
+        println!("reading a file: {filename}",);
+        match fs::read(filename) {
+            Err(err) => (
+                String::from("HTTP/1.1 400 Bad Request\r\n\r\n"),
+                Some(format!("could not read a file: {err:?}")),
+            ),
+            Ok(content) => (
+                format!(
+                    "\
+                    HTTP/1.1 404 Not Found\r\n\
+                    Content-Type: application-octet-stream\r\n\
+                    Content-Length: {}\r\n\
+                    \r\n\
+                    {}
+                    ",
+                    content.len(),
+                    str::from_utf8(&content).unwrap(),
+                ),
+                None,
+            ),
+        }
     } else {
         (String::from("HTTP/1.1 404 Not Found\r\n\r\n"), None)
     }
 }
 
+const ARGS: [&str; 1] = ["--directory"];
+
 fn main() {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
     println!("Logs from your program will appear here!!!");
     // Uncomment this block to pass the first stage
+
+    let args_set = HashSet::from(ARGS);
+    let args: Vec<String> = env::args().collect();
+    println!("args: {args:?}");
+    let mut passed_args: HashMap<String, String> = HashMap::new();
+    for (i, arg) in args[1..].iter().enumerate() {
+        // TODO: args_set to HashMap to map with its properties such as, is option value need?
+        if i % 2 == 1 {
+            continue;
+        }
+        if !args_set.contains(arg.as_str()) {
+            eprintln!("unknown an option: {arg}");
+            exit(-1);
+        }
+        let i = args.iter().position(|v| v == arg).unwrap();
+        let value = &args[i + 1];
+        passed_args.insert(arg.clone(), value.clone());
+    }
+
+    let dir_key = &String::from(ARGS[0]);
+    let mut dir: Option<String> = None;
+    if passed_args.contains_key(dir_key) {
+        let arg_dir = &passed_args.get(dir_key).unwrap().clone();
+        println!("creating a directory: {arg_dir}");
+        if let Err(err) = fs::create_dir(arg_dir) {
+            eprintln!(
+                "could not create a directory: dir: {arg_dir}, error: {err}"
+            );
+            exit(-1);
+        }
+        dir = Some(arg_dir.clone());
+    }
 
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
@@ -128,8 +193,9 @@ fn main() {
             }
         };
 
+        let dir = dir.clone();
         std::thread::spawn(move || {
-            let (response, error) = handle(&mut stream);
+            let (response, error) = handle(&mut stream, dir);
             if let Some(error) = error {
                 eprintln!("{error}");
             }
