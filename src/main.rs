@@ -149,7 +149,7 @@ fn main() {
     // Uncomment this block to pass the first stage
 
     let args_set = HashSet::from(ARGS);
-    println!("args: {args:?}");
+    let args: Vec<String> = env::args().collect();
     let mut passed_args: HashMap<String, String> = HashMap::new();
     for (i, arg) in args[1..].iter().enumerate() {
         // TODO: args_set to HashMap to map with its properties such as, is option value need?
