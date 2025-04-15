@@ -1,9 +1,8 @@
 use core::str;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::ops::Deref;
 use std::process::exit;
 use std::{env, fs};
 
@@ -150,7 +149,6 @@ fn main() {
     // Uncomment this block to pass the first stage
 
     let args_set = HashSet::from(ARGS);
-    let args: Vec<String> = env::args().collect();
     println!("args: {args:?}");
     let mut passed_args: HashMap<String, String> = HashMap::new();
     for (i, arg) in args[1..].iter().enumerate() {
@@ -172,7 +170,7 @@ fn main() {
     if passed_args.contains_key(dir_key) {
         let arg_dir = &passed_args.get(dir_key).unwrap().clone();
         println!("creating a directory: {arg_dir}");
-        if let Err(err) = fs::create_dir(arg_dir) {
+        if let Err(err) = fs::create_dir_all(arg_dir) {
             eprintln!(
                 "could not create a directory: dir: {arg_dir}, error: {err}"
             );
