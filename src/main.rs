@@ -125,7 +125,7 @@ fn handle(
                 format!(
                     "\
                     HTTP/1.1 200 OK\r\n\
-                    Content-Type: application-octet-stream\r\n\
+                    Content-Type: application/octet-stream\r\n\
                     Content-Length: {}\r\n\
                     \r\n\
                     {}
