@@ -1,7 +1,7 @@
 use core::str;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::process::exit;
 use std::{env, fs};
@@ -114,13 +114,23 @@ fn handle(
     } else if req.path.starts_with("/files/") {
         let filename = req.path.trim_start_matches("/files/");
         let dir = dir.unwrap_or(String::from("/tmp/"));
-        let filename = format!("{dir}{filename}");
+        let filename = &format!("{dir}{filename}");
+
         println!("reading a file: {filename}",);
         match fs::read(filename) {
-            Err(err) => (
-                String::from("HTTP/1.1 400 Bad Request\r\n\r\n"),
-                Some(format!("could not read a file: {err:?}")),
-            ),
+            Err(err) => {
+                if err.kind() == ErrorKind::NotFound {
+                    (
+                        String::from("HTTP/1.1 404 Not Found\r\n\r\n"),
+                        Some(format!("no file found, filename: {filename}")),
+                    )
+                } else {
+                    (
+                        String::from("HTTP/1.1 400 Bad Request\r\n\r\n"),
+                        Some(format!("could not read a file: {err:?}")),
+                    )
+                }
+            }
             Ok(content) => (
                 format!(
                     "\
