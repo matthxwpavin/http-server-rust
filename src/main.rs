@@ -1,4 +1,3 @@
-use anyhow::Error;
 use core::str;
 use regex::Regex;
 use std::collections::HashMap;
@@ -120,7 +119,7 @@ fn main() {
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
     for stream in listener.incoming() {
-        println!("accpeting a connection...");
+        println!("accpeting a new connection...");
         let mut stream = match stream {
             Ok(stream) => stream,
             Err(err) => {
