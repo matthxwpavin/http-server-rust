@@ -124,7 +124,7 @@ fn handle(
             Ok(content) => (
                 format!(
                     "\
-                    HTTP/1.1 404 Not Found\r\n\
+                    HTTP/1.1 200 OK\r\n\
                     Content-Type: application-octet-stream\r\n\
                     Content-Length: {}\r\n\
                     \r\n\
