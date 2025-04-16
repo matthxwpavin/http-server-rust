@@ -122,6 +122,7 @@ fn handle(
                     Some(String::from("no payload found")),
                 ),
                 Some(content) => {
+                    let content = str::from_utf8(&content).unwrap();
                     if let Err(err) = fs::write(filename, content) {
                         (
                             String::from("HTTP/1.1 400 Bad Request\r\n\r\n"),
@@ -150,20 +151,24 @@ fn handle(
                         )
                     }
                 }
-                Ok(content) => (
-                    format!(
-                        "\
+                Ok(content) => {
+                    let content =
+                        str::from_utf8(&content).unwrap().replace("\x00", "");
+                    (
+                        format!(
+                            "\
                     HTTP/1.1 200 OK\r\n\
                     Content-Type: application/octet-stream\r\n\
                     Content-Length: {}\r\n\
                     \r\n\
                     {}
                     ",
-                        content.len(),
-                        str::from_utf8(&content).unwrap(),
-                    ),
-                    None,
-                ),
+                            content.len(),
+                            content,
+                        ),
+                        None,
+                    )
+                }
             }
         }
     } else {
