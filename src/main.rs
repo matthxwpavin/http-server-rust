@@ -11,7 +11,7 @@ struct HttpRequest {
     method: String,
     path: String,
     headers: HashMap<String, String>,
-    body: Vec<u8>,
+    body: Option<Vec<u8>>,
 }
 
 impl HttpRequest {
@@ -38,7 +38,7 @@ impl HttpRequest {
             method: String::from(request_lines[0]),
             path: String::from(request_lines[1]),
             headers,
-            body: Vec::from(splited[0].as_bytes()),
+            body: splited.get(1).map(|body| Vec::from(body.as_bytes())),
         })
     }
 }
@@ -67,9 +67,7 @@ fn handle(
 
     let req = match HttpRequest::parse(data) {
         Some(req) => req,
-        None => {
-            return (String::from("HTTP/1.1 200 OK\r\n"), None);
-        }
+        None => return (String::from("HTTP/1.1 200 OK\r\n"), None),
     };
 
     let re = Regex::new(r"/echo/(?<echo_str>.+)").unwrap();
@@ -116,35 +114,57 @@ fn handle(
         let dir = dir.unwrap_or(String::from("/tmp/"));
         let filename = &format!("{dir}{filename}");
 
-        println!("reading a file: {filename}",);
-        match fs::read(filename) {
-            Err(err) => {
-                if err.kind() == ErrorKind::NotFound {
-                    (
-                        String::from("HTTP/1.1 404 Not Found\r\n\r\n"),
-                        Some(format!("no file found, filename: {filename}")),
-                    )
-                } else {
-                    (
-                        String::from("HTTP/1.1 400 Bad Request\r\n\r\n"),
-                        Some(format!("could not read a file: {err:?}")),
-                    )
+        if req.method == "POST" {
+            println!("creating a file: {filename}");
+            match req.body {
+                None => (
+                    String::from("HTTP/1.1 400 Bad Request\r\n\r\n"),
+                    Some(String::from("no payload found")),
+                ),
+                Some(content) => {
+                    if let Err(err) = fs::write(filename, content) {
+                        (
+                            String::from("HTTP/1.1 400 Bad Request\r\n\r\n"),
+                            Some(format!("could not write file: {err:?}")),
+                        )
+                    } else {
+                        (String::from("HTTP/1.1 201 Created\r\n\r\n"), None)
+                    }
                 }
             }
-            Ok(content) => (
-                format!(
-                    "\
+        } else {
+            println!("reading a file: {filename}",);
+            match fs::read(filename) {
+                Err(err) => {
+                    if err.kind() == ErrorKind::NotFound {
+                        (
+                            String::from("HTTP/1.1 404 Not Found\r\n\r\n"),
+                            Some(format!(
+                                "no file found, filename: {filename}"
+                            )),
+                        )
+                    } else {
+                        (
+                            String::from("HTTP/1.1 400 Bad Request\r\n\r\n"),
+                            Some(format!("could not read a file: {err:?}")),
+                        )
+                    }
+                }
+                Ok(content) => (
+                    format!(
+                        "\
                     HTTP/1.1 200 OK\r\n\
                     Content-Type: application/octet-stream\r\n\
                     Content-Length: {}\r\n\
                     \r\n\
                     {}
                     ",
-                    content.len(),
-                    str::from_utf8(&content).unwrap(),
+                        content.len(),
+                        str::from_utf8(&content).unwrap(),
+                    ),
+                    None,
                 ),
-                None,
-            ),
+            }
         }
     } else {
         (String::from("HTTP/1.1 404 Not Found\r\n\r\n"), None)
