@@ -11,7 +11,7 @@ struct HttpRequest {
     method: String,
     path: String,
     headers: HashMap<String, String>,
-    body: Option<Vec<u8>>,
+    body: Option<String>,
 }
 
 impl HttpRequest {
@@ -38,7 +38,7 @@ impl HttpRequest {
             method: String::from(request_lines[0]),
             path: String::from(request_lines[1]),
             headers,
-            body: splited.get(1).map(|body| Vec::from(body.as_bytes())),
+            body: splited.get(1).map(|body| String::from(*body)),
         })
     }
 }
@@ -121,8 +121,8 @@ fn handle(
                     String::from("HTTP/1.1 400 Bad Request\r\n\r\n"),
                     Some(String::from("no payload found")),
                 ),
-                Some(content) => {
-                    let content = str::from_utf8(&content).unwrap();
+                Some(mut content) => {
+                    content = content.replace('\x00', "");
                     if let Err(err) = fs::write(filename, content) {
                         (
                             String::from("HTTP/1.1 400 Bad Request\r\n\r\n"),
