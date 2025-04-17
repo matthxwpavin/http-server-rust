@@ -48,14 +48,27 @@ fn handle(
             .name("echo_str")
             .unwrap()
             .as_str();
+        let encoding = match req.headers.get("Accept-Encoding") {
+            None => "",
+            Some(enc) => {
+                if enc == "gzip" {
+                    "Content-Encoding: gzip\r\n"
+                } else {
+                    ""
+                }
+            }
+        };
+
         (
             format!(
                 "\
                                 HTTP/1.1 200 OK\r\n\
                                 Content-Type: text/plain\r\n\
                                 Content-Length: {}\r\n\
+                                {}\
                                 \r\n{}",
                 echo.len(),
+                encoding,
                 echo,
             ),
             None,
