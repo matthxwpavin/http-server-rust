@@ -48,10 +48,11 @@ fn handle(
             .name("echo_str")
             .unwrap()
             .as_str();
+
         let encoding = match req.headers.get("Accept-Encoding") {
             None => "",
-            Some(enc) => {
-                if enc == "gzip" {
+            Some(values) => {
+                if values.iter().any(|enc| enc == "gzip") {
                     "Content-Encoding: gzip\r\n"
                 } else {
                     ""
@@ -74,7 +75,7 @@ fn handle(
             None,
         )
     } else if req.path == "/user-agent" {
-        let user_agent = req.headers.get("User-Agent").unwrap();
+        let user_agent = &req.headers.get("User-Agent").unwrap()[0];
 
         (
             format!(

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 pub struct HttpRequest {
     pub method: String,
     pub path: String,
-    pub headers: HashMap<String, String>,
+    pub headers: HashMap<String, Vec<String>>,
     pub body: Option<String>,
 }
 
@@ -22,10 +22,14 @@ impl HttpRequest {
         let headers =
             upper[1..].iter().fold(HashMap::new(), |mut headers, line| {
                 let mut splited = line.split(":");
-                headers.insert(
-                    String::from(splited.next().unwrap().trim()),
-                    String::from(splited.next().unwrap().trim()),
-                );
+                let key = splited.next().unwrap().trim();
+                let value = splited.next().unwrap().trim();
+                let values = if value.contains(", ") {
+                    value.split(", ").map(String::from).collect::<Vec<String>>()
+                } else {
+                    vec![String::from(value)]
+                };
+                headers.insert(String::from(key), values);
                 headers
             });
         Some(HttpRequest {
