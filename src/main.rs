@@ -1,6 +1,8 @@
 mod http_request;
 
 use core::str;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::io::{ErrorKind, Read, Write};
@@ -13,11 +15,11 @@ use http_request::HttpRequest;
 fn handle(
     stream: &mut TcpStream,
     dir: Option<String>,
-) -> (String, Option<String>) {
+) -> (Vec<u8>, Option<String>) {
     let mut buf = [0u8; 512];
     if let Err(err) = stream.read(&mut buf) {
         return (
-            String::from("HTTP/1.1 500 Internal Server Error\r\n\r\n"),
+            Vec::from(b"HTTP/1.1 500 Internal Server Error\r\n\r\n"),
             Some(format!("could not read: {err:?}")),
         );
     }
@@ -26,7 +28,7 @@ fn handle(
         Ok(data) => data,
         Err(err) => {
             return (
-                String::from("HTTP/1.1 400 Bad Request\r\n\r\n"),
+                Vec::from(b"HTTP/1.1 400 Bad Request\r\n\r\n"),
                 Some(format!("could not create a buf string: {err:?}")),
             );
         }
@@ -34,13 +36,13 @@ fn handle(
 
     let req = match HttpRequest::parse(data) {
         Some(req) => req,
-        None => return (String::from("HTTP/1.1 200 OK\r\n"), None),
+        None => return (Vec::from(b"HTTP/1.1 200 OK\r\n"), None),
     };
 
     let re = Regex::new(r"/echo/(?<echo_str>.+)").unwrap();
 
     if req.path == "/" {
-        (String::from("HTTP/1.1 200 OK\r\n\r\n"), None)
+        (Vec::from(b"HTTP/1.1 200 OK\r\n\r\n"), None)
     } else if re.is_match(&req.path) {
         let echo = re
             .captures(&req.path)
@@ -49,44 +51,50 @@ fn handle(
             .unwrap()
             .as_str();
 
-        let encoding = match req.headers.get("Accept-Encoding") {
-            None => "",
-            Some(values) => {
-                if values.iter().any(|enc| enc == "gzip") {
-                    "Content-Encoding: gzip\r\n"
-                } else {
-                    ""
-                }
+        let mut buf: Vec<u8> = vec![];
+        buf.extend_from_slice(
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n",
+        );
+
+        let mut echo_compression: Option<Vec<u8>> = None;
+        let mut content_lenght = echo.len();
+        if let Some(values) = req.headers.get("Accept-Encoding") {
+            if values.iter().any(|enc| enc == "gzip") {
+                let mut e = GzEncoder::new(Vec::new(), Compression::default());
+                e.write_all(echo.as_bytes()).unwrap();
+                let encoded = e.finish().unwrap();
+                content_lenght = encoded.len();
+                echo_compression = Some(encoded);
+                buf.extend_from_slice(b"Content-Encoding: gzip");
             }
+        }
+
+        buf.extend_from_slice(
+            format!("Content-Length: {}\r\n\r\n", content_lenght).as_bytes(),
+        );
+
+        match echo_compression {
+            None => buf.extend_from_slice(echo.as_bytes()),
+            Some(compression) => buf.extend_from_slice(&compression),
         };
 
-        (
-            format!(
-                "\
-                                HTTP/1.1 200 OK\r\n\
-                                Content-Type: text/plain\r\n\
-                                Content-Length: {}\r\n\
-                                {}\
-                                \r\n{}",
-                echo.len(),
-                encoding,
-                echo,
-            ),
-            None,
-        )
+        (buf, None)
     } else if req.path == "/user-agent" {
         let user_agent = &req.headers.get("User-Agent").unwrap()[0];
 
         (
-            format!(
-                "\
+            Vec::from(
+                format!(
+                    "\
                                     HTTP/1.1 200 OK\r\n\
                                     Content-Type: text/plain\r\n\
                                     Content-Length: {}\r\n\
                                     \r\n\
                                     {}",
-                user_agent.len(),
-                user_agent
+                    user_agent.len(),
+                    user_agent
+                )
+                .as_bytes(),
             ),
             None,
         )
@@ -99,18 +107,18 @@ fn handle(
             println!("creating a file: {filename}");
             match req.body {
                 None => (
-                    String::from("HTTP/1.1 400 Bad Request\r\n\r\n"),
+                    Vec::from(b"HTTP/1.1 400 Bad Request\r\n\r\n"),
                     Some(String::from("no payload found")),
                 ),
                 Some(mut content) => {
                     content = content.replace('\x00', "");
                     if let Err(err) = fs::write(filename, content) {
                         (
-                            String::from("HTTP/1.1 400 Bad Request\r\n\r\n"),
+                            Vec::from(b"HTTP/1.1 400 Bad Request\r\n\r\n"),
                             Some(format!("could not write file: {err:?}")),
                         )
                     } else {
-                        (String::from("HTTP/1.1 201 Created\r\n\r\n"), None)
+                        (Vec::from(b"HTTP/1.1 201 Created\r\n\r\n"), None)
                     }
                 }
             }
@@ -120,14 +128,14 @@ fn handle(
                 Err(err) => {
                     if err.kind() == ErrorKind::NotFound {
                         (
-                            String::from("HTTP/1.1 404 Not Found\r\n\r\n"),
+                            Vec::from(b"HTTP/1.1 404 Not Found\r\n\r\n"),
                             Some(format!(
                                 "no file found, filename: {filename}"
                             )),
                         )
                     } else {
                         (
-                            String::from("HTTP/1.1 400 Bad Request\r\n\r\n"),
+                            Vec::from(b"HTTP/1.1 400 Bad Request\r\n\r\n"),
                             Some(format!("could not read a file: {err:?}")),
                         )
                     }
@@ -136,16 +144,19 @@ fn handle(
                     let content =
                         str::from_utf8(&content).unwrap().replace("\x00", "");
                     (
-                        format!(
-                            "\
+                        Vec::from(
+                            format!(
+                                "\
                     HTTP/1.1 200 OK\r\n\
                     Content-Type: application/octet-stream\r\n\
                     Content-Length: {}\r\n\
                     \r\n\
                     {}
                     ",
-                            content.len(),
-                            content,
+                                content.len(),
+                                content,
+                            )
+                            .as_bytes(),
                         ),
                         None,
                     )
@@ -153,7 +164,7 @@ fn handle(
             }
         }
     } else {
-        (String::from("HTTP/1.1 404 Not Found\r\n\r\n"), None)
+        (Vec::from(b"HTTP/1.1 404 Not Found\r\n\r\n"), None)
     }
 }
 
@@ -213,7 +224,7 @@ fn main() {
             if let Some(error) = error {
                 eprintln!("{error}");
             }
-            _ = stream.write_all(response.as_bytes());
+            _ = stream.write_all(response.as_slice());
         });
     }
 }
