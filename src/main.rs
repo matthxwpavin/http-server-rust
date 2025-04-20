@@ -65,7 +65,7 @@ fn handle(
                 let encoded = e.finish().unwrap();
                 content_lenght = encoded.len();
                 echo_compression = Some(encoded);
-                buf.extend_from_slice(b"Content-Encoding: gzip");
+                buf.extend_from_slice(b"Content-Encoding: gzip\r\n");
             }
         }
 
