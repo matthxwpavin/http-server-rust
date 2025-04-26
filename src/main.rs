@@ -9,6 +9,7 @@ use std::io::{ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::process::exit;
 use std::{env, fs};
+use std::{thread, time};
 
 use http_request::HttpRequest;
 
@@ -35,6 +36,7 @@ fn handle(
             );
         }
     };
+    println!("{data}");
 
     let req = match HttpRequest::parse(data) {
         Some(req) => req,
@@ -256,9 +258,13 @@ fn main() {
             println!("{}", String::from_utf8(response.clone()).unwrap());
 
             _ = stream.write_all(response.as_slice());
+            _ = stream.flush();
             if is_close {
                 break;
             }
+
+            let ten_millis = time::Duration::from_millis(3000);
+            thread::sleep(ten_millis);
         });
     }
 }
