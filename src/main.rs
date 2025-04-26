@@ -12,12 +12,16 @@ use std::{env, fs};
 
 use http_request::HttpRequest;
 
-fn handle(stream: &mut TcpStream, dir: &str) -> (Vec<u8>, Option<String>) {
+fn handle(
+    stream: &mut TcpStream,
+    dir: &str,
+) -> (Vec<u8>, Option<String>, bool) {
     let mut buf = [0u8; 512];
     if let Err(err) = stream.read(&mut buf) {
         return (
             Vec::from(b"HTTP/1.1 500 Internal Server Error\r\n\r\n"),
             Some(format!("could not read: {err:?}")),
+            false,
         );
     }
 
@@ -27,19 +31,27 @@ fn handle(stream: &mut TcpStream, dir: &str) -> (Vec<u8>, Option<String>) {
             return (
                 Vec::from(b"HTTP/1.1 400 Bad Request\r\n\r\n"),
                 Some(format!("could not create a buf string: {err:?}")),
+                false,
             );
         }
     };
 
     let req = match HttpRequest::parse(data) {
         Some(req) => req,
-        None => return (Vec::from(b"HTTP/1.1 200 OK\r\n"), None),
+        None => return (Vec::from(b"HTTP/1.1 200 OK\r\n"), None, false),
+    };
+
+    let connection_header = req.headers.get("Connection");
+    let is_close = if let Some(value) = connection_header {
+        value.iter().any(|v| v == "close")
+    } else {
+        false
     };
 
     let re = Regex::new(r"/echo/(?<echo_str>.+)").unwrap();
 
     if req.path == "/" {
-        (Vec::from(b"HTTP/1.1 200 OK\r\n\r\n"), None)
+        (Vec::from(b"HTTP/1.1 200 OK\r\n\r\n"), None, is_close)
     } else if re.is_match(&req.path) {
         let echo = re
             .captures(&req.path)
@@ -75,7 +87,7 @@ fn handle(stream: &mut TcpStream, dir: &str) -> (Vec<u8>, Option<String>) {
             Some(compression) => buf.extend_from_slice(&compression),
         };
 
-        (buf, None)
+        (buf, None, is_close)
     } else if req.path == "/user-agent" {
         let user_agent = &req.headers.get("User-Agent").unwrap()[0];
 
@@ -94,6 +106,7 @@ fn handle(stream: &mut TcpStream, dir: &str) -> (Vec<u8>, Option<String>) {
                 .as_bytes(),
             ),
             None,
+            is_close,
         )
     } else if req.path.starts_with("/files/") {
         let filename = req.path.trim_start_matches("/files/");
@@ -106,6 +119,7 @@ fn handle(stream: &mut TcpStream, dir: &str) -> (Vec<u8>, Option<String>) {
                 None => (
                     Vec::from(b"HTTP/1.1 400 Bad Request\r\n\r\n"),
                     Some(String::from("no payload found")),
+                    is_close,
                 ),
                 Some(mut content) => {
                     content = content.replace('\x00', "");
@@ -113,9 +127,14 @@ fn handle(stream: &mut TcpStream, dir: &str) -> (Vec<u8>, Option<String>) {
                         (
                             Vec::from(b"HTTP/1.1 400 Bad Request\r\n\r\n"),
                             Some(format!("could not write file: {err:?}")),
+                            is_close,
                         )
                     } else {
-                        (Vec::from(b"HTTP/1.1 201 Created\r\n\r\n"), None)
+                        (
+                            Vec::from(b"HTTP/1.1 201 Created\r\n\r\n"),
+                            None,
+                            is_close,
+                        )
                     }
                 }
             }
@@ -129,11 +148,13 @@ fn handle(stream: &mut TcpStream, dir: &str) -> (Vec<u8>, Option<String>) {
                             Some(format!(
                                 "no file found, filename: {filename}"
                             )),
+                            is_close,
                         )
                     } else {
                         (
                             Vec::from(b"HTTP/1.1 400 Bad Request\r\n\r\n"),
                             Some(format!("could not read a file: {err:?}")),
+                            is_close,
                         )
                     }
                 }
@@ -156,12 +177,13 @@ fn handle(stream: &mut TcpStream, dir: &str) -> (Vec<u8>, Option<String>) {
                             .as_bytes(),
                         ),
                         None,
+                        is_close,
                     )
                 }
             }
         }
     } else {
-        (Vec::from(b"HTTP/1.1 404 Not Found\r\n\r\n"), None)
+        (Vec::from(b"HTTP/1.1 404 Not Found\r\n\r\n"), None, is_close)
     }
 }
 
@@ -217,11 +239,26 @@ fn main() {
 
         let dir_cloned = dir.clone();
         std::thread::spawn(move || loop {
-            let (response, error) = handle(&mut stream, &dir_cloned);
+            let (mut response, error, is_close) =
+                handle(&mut stream, &dir_cloned);
             if let Some(error) = error {
                 eprintln!("{error}");
             }
+            if is_close {
+                let response_str = String::from_utf8(response.clone()).unwrap();
+                let splited: Vec<&str> =
+                    response_str.split("\r\n\r\n").collect();
+                response = Vec::from(format!(
+                    "{}\r\nConnection: close\r\n\r\n{}",
+                    splited[0], splited[1],
+                ));
+            }
+            println!("{}", String::from_utf8(response.clone()).unwrap());
+
             _ = stream.write_all(response.as_slice());
+            if is_close {
+                break;
+            }
         });
     }
 }
