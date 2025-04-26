@@ -12,10 +12,7 @@ use std::{env, fs};
 
 use http_request::HttpRequest;
 
-fn handle(
-    stream: &mut TcpStream,
-    dir: Option<String>,
-) -> (Vec<u8>, Option<String>) {
+fn handle(stream: &mut TcpStream, dir: &str) -> (Vec<u8>, Option<String>) {
     let mut buf = [0u8; 512];
     if let Err(err) = stream.read(&mut buf) {
         return (
@@ -100,7 +97,7 @@ fn handle(
         )
     } else if req.path.starts_with("/files/") {
         let filename = req.path.trim_start_matches("/files/");
-        let dir = dir.unwrap_or(String::from("/tmp/"));
+        let dir = if dir.is_empty() { "/tmp/" } else { dir };
         let filename = &format!("{dir}{filename}");
 
         if req.method == "POST" {
@@ -193,7 +190,7 @@ fn main() {
     }
 
     let dir_key = &String::from(ARGS[0]);
-    let mut dir: Option<String> = None;
+    let mut dir = String::new();
     if passed_args.contains_key(dir_key) {
         let arg_dir = &passed_args.get(dir_key).unwrap().clone();
         println!("creating a directory: {arg_dir}");
@@ -203,7 +200,7 @@ fn main() {
             );
             exit(-1);
         }
-        dir = Some(arg_dir.clone());
+        dir = arg_dir.clone();
     }
 
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
@@ -218,9 +215,9 @@ fn main() {
             }
         };
 
-        let dir = dir.clone();
-        std::thread::spawn(move || {
-            let (response, error) = handle(&mut stream, dir);
+        let dir_cloned = dir.clone();
+        std::thread::spawn(move || loop {
+            let (response, error) = handle(&mut stream, &dir_cloned);
             if let Some(error) = error {
                 eprintln!("{error}");
             }
