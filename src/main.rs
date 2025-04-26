@@ -258,12 +258,12 @@ fn main() {
             println!("{}", String::from_utf8(response.clone()).unwrap());
 
             _ = stream.write_all(response.as_slice());
-            _ = stream.flush();
+            // _ = stream.flush();
             if is_close {
                 break;
             }
 
-            let ten_millis = time::Duration::from_millis(3000);
+            let ten_millis = time::Duration::from_millis(500);
             thread::sleep(ten_millis);
         });
     }
