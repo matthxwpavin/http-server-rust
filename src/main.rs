@@ -20,7 +20,7 @@ fn handle(
     let mut buf = [0u8; 512];
     if let Err(err) = stream.read(&mut buf) {
         return (
-            Vec::from(b"HTTP/1.1 500 Internal Server Error\r\n\r\n"),
+            Vec::from(b"HTTP/1.1 400 Bad Request\r\n\r\n"),
             Some(format!("could not read: {err:?}")),
             false,
         );
@@ -36,6 +36,8 @@ fn handle(
             );
         }
     };
+
+    println!("data: {data}");
 
     let req = match HttpRequest::parse(data) {
         Some(req) => req,
