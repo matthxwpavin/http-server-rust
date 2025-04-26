@@ -37,8 +37,6 @@ fn handle(
         }
     };
 
-    println!("data: {data}");
-
     let req = match HttpRequest::parse(data) {
         Some(req) => req,
         None => return (Vec::from(b"HTTP/1.1 200 OK\r\n"), None, false),
