@@ -36,7 +36,6 @@ fn handle(
             );
         }
     };
-    println!("{data}");
 
     let req = match HttpRequest::parse(data) {
         Some(req) => req,
@@ -255,7 +254,6 @@ fn main() {
                     splited[0], splited[1],
                 ));
             }
-            // println!("{}", String::from_utf8(response.clone()).unwrap());
 
             _ = stream.write_all(response.as_slice());
             // _ = stream.flush();
